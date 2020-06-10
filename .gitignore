@@ -1,0 +1,8 @@
+dist/
+dist-newstyle/
+cabal.project.local
+result
+tags
+*~
+run.txt
+statement.cnf

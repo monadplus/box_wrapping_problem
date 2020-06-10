@@ -1,0 +1,190 @@
+\documentclass[12pt, a4paper]{article} % book, report, article, letter, slides
+                                       % letterpaper/a4paper, 10pt/11pt/12pt, twocolumn/twoside/landscape/draft
+
+%%%%%%%%%%%%%%%% PACKAGES %%%%%%%%%%%%%%%%%%%%%
+
+\usepackage[utf8]{inputenc} % encoding
+
+\usepackage[english]{babel} % use special characters and also translates some elements within the document.
+
+\usepackage{amsmath}        % Math
+\usepackage{amsthm}         % Math, \newtheorem, \proof, etc
+\usepackage{amssymb}        % Math, extended collection
+\usepackage{bm}             % $\bm{D + C}$
+\newtheorem{theorem}{Theorem}[section]     % \begin{theorem}\label{t:label}  \end{theorem}<Paste>
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+\newenvironment{claim}[1]{\par\noindent\underline{Claim:}\space#1}{}
+\newenvironment{claimproof}[1]{\par\noindent\underline{Proof:}\space#1}{\hfill $\blacksquare$}
+
+\usepackage{hyperref}       % Hyperlinks \url{url} or \href{url}{name}
+
+\usepackage{parskip}        % \par starts on left (not idented)
+
+\usepackage{abstract}       % Abstract
+
+\usepackage{graphicx}       % Images
+\graphicspath{{./images/}}
+
+\usepackage[vlined,ruled]{algorithm2e} % pseudo-code
+
+% \usepackage[document]{ragged2e}  % Left-aligned (whole document)
+% \begin{...} ... \end{...}   flushleft, flushright, center
+
+%%%%%%%%%%%%%%%% CODE %%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{minted}         % Code listing
+% \mint{html}|<h2>Something <b>here</b></h2>|
+% \inputminted{octave}{BitXorMatrix.m}
+
+%\begin{listing}[H]
+  %\begin{minted}[xleftmargin=20pt,linenos,bgcolor=codegray]{haskell}
+  %\end{minted}
+  %\caption{Example of a listing.}
+  %\label{lst:example} % You can reference it by \ref{lst:example}
+%\end{listing}
+
+\newcommand{\code}[1]{\texttt{#1}} % Define \code{foo.hs} environment
+
+%%%%%%%%%%%%%%%% COLOURS %%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{xcolor}         % Colours \definecolor, \color{codegray}
+\definecolor{codegray}{rgb}{0.9, 0.9, 0.9}
+% \color{codegray} ... ...
+% \textcolor{red}{easily}
+
+%%%%%%%%%%%%%%%% CONFIG %%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\absnamepos}{flushleft}
+\setlength{\absleftindent}{0pt}
+\setlength{\absrightindent}{0pt}
+
+%%%%%%%%%%%%%%%% GLOSSARIES %%%%%%%%%%%%%%%%%%%%%
+
+%\usepackage{glossaries}
+
+%\makeglossaries % before entries
+
+%\newglossaryentry{latex}{
+    %name=latex,
+    %description={Is a mark up language specially suited
+    %for scientific documents}
+%}
+
+% Referene to a glossary \gls{latex}
+% Print glossaries \printglossaries
+
+\usepackage[acronym]{glossaries} %
+
+% \acrshort{name}
+% \acrfull{name}
+%\newacronym{kcol}{$k$-COL}{$k$-coloring problem}
+
+\usepackage{enumitem}
+
+%%%%%%%%%%%%%%%% HEADER %%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Arnau Abella}
+\lhead{Combinatorial Problem Solving}
+\rfoot{Page \thepage}
+
+%%%%%%%%%%%%%%%% TITLE %%%%%%%%%%%%%%%%%%%%%
+
+\title{%
+  Linear Programming: Box Wrappig
+}
+\author{%
+  Arnau Abella \\
+  \large{Universitat Polit\`ecnica de Catalunya}
+}
+\date{\today}
+
+%%%%%%%%%%%%%%%% DOCUMENT %%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Variables}\label{variables}
+
+The following are the variables appearing in the linear equations of the model:
+
+\begin{itemize}
+  \setlength{\itemindent}{-.0in}
+  \item[] $n$ = total number of boxes.
+  \item[] $w$ = width of the wrapping.
+  \item[] $l$ = maximum length of the wrapping.
+  \item[] $length$ = current length of the wrapping (where $length \leq l$).
+  \item[] $x^{tl}_i$ = x coordinate of the $i$-th box (${x^{tl} = \{0,\cdots, w-1\}}$).
+  \item[] $y^{tl}_i$ = y coordinate of the $i$-th box (${y^{tl} = \{0,\cdots, l-1\}}$).
+  \item[] $width_i$ = assigned width of the $i$-th box (${width = \{0,\cdots, w-1\}}$).
+  \item[] $height_i$ = assigned height of the $i$-th box (${height = \{0,\cdots, l-1\}}$).
+\end{itemize}
+
+where $i = \{0, \cdots, n-1\}$.
+
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Constraints}\label{constraints}
+
+(Bounds) Boxes must be placed inside the width of the wrapping:
+
+\begin{equation}\label{eq:one}
+  x^{tl}_i \leq w - witdth_i \quad \text{forall i}
+\end{equation}
+
+\newpage
+
+(Rotation) The boxes must be placed in vertical or horizontal position:
+
+\begin{equation}\label{eq:two}
+  width_i + height_i = b\_width_i + b\_heigth_i
+\end{equation}
+
+where $b\_width_i$ and $b\_height_i$ are the given width and height of the $i$-th box.
+
+(Overlapping) The boxes must not overlap:
+
+\begin{equation}\label{eq:three}
+  \begin{split}
+    ((x^{tl}_i &\leq x^{tl}_j - width_i)\\
+    + (x^{tl}_i &\geq x^{tl}_j + width_j)\\
+    + (y^{tl}_i &\leq y^{tl}_j - height_i)\\
+    + (y^{tl}_i &\geq y^{tl}_j + heigth_j)) \geq 1 \quad \text{for all} \ i, j, i \neq j
+  \end{split}
+\end{equation}
+
+(Length) The current length of the wrapping must at least the position of the furthest box from the origin plus its height:
+
+\begin{equation}\label{eq:four}
+  length \geq y^{tl}_i + height_i \quad \text{forall i}
+\end{equation}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Objective function (to be minimized)}\label{variables}
+
+\begin{equation}\label{eq:four}
+  Cost = length
+\end{equation}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Optimizations}\label{optimizations}
+
+\begin{itemize}
+  \item The first box, by symmetry, can be placed on the left-side of the wrapping without changing the final result.
+  \item Repeating branches of identical boxes is redundant, imposing an arbitrary order will prevent this.
+  \item Square boxes can be placed indistinct vertically or horizontally.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
