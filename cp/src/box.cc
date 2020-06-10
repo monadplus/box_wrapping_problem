@@ -9,6 +9,20 @@
 using namespace std;
 using namespace Gecode;
 
+bool are_equal(const pair<int,int>& b1, const pair<int,int>& b2) {
+  return b1.first == b2.first && b1.second == b2.second;
+}
+
+bool cmp(const pair<int,int>& b1, const pair<int,int>& b2) {
+  return (b1.first * b1.second) > (b2.first * b2.second);
+}
+
+int upper_bound_length(int w, int m, int width, int height) {
+  int boxes_row = w / min(width,height);
+  int min_rows = std::ceil(m / ((double)boxes_row));
+  return min_rows * std::max(width,height);
+}
+
 class Box : public Space {
 
   private:
@@ -57,8 +71,7 @@ class Box : public Space {
       else        rel(home, x, IRT_NQ, n);
     }
 
-    // Lower bound for maxLength
-    int minMaxLength() {
+    int lower_bound_length() {
       int l = 0;
       for (int i = 0; i < boxes.size(); i++) {
         l = max(l, std::min(boxes[i].first, boxes[i].second));
@@ -67,7 +80,7 @@ class Box : public Space {
     }
 
     Box(int _w, int _l, const vector<pair<int,int> >& _boxes) :
-      w(_w), boxes(_boxes), length(*this, minMaxLength(), _l),
+      w(_w), boxes(_boxes), length(*this, lower_bound_length(), _l),
 
       x_top(*this   , _boxes.size(), 0, _w-1),
       x_bottom(*this, _boxes.size(), 0, _w-1),
@@ -97,12 +110,22 @@ class Box : public Space {
 
         // overlapping constraint
         for(int j = i+1; j < boxes.size(); j++) {
-          rel(*this
-             ,  (x_top[j] > x_bottom[i])
-             || (x_bottom[j] < x_top[i])
-             || (y_top[j] > y_bottom[i])
-             || (y_bottom[j] < y_top[i])
-             );
+          if (are_equal(boxes[i], boxes[j])) {
+            // Breaking symmetries of identical boxes by imposng ordering.
+            rel(*this, y_top[i] <= y_top[j]); // strict inequality here would be incorrect.
+            rel(*this
+               ,  (x_bottom[i] < x_top[j])
+               || (y_bottom[i] < y_top[j])
+               );
+          }
+          else {
+            rel(*this
+               ,  (x_top[j] > x_bottom[i])
+               || (x_bottom[j] < x_top[i])
+               || (y_top[j] > y_bottom[i])
+               || (y_bottom[j] < y_top[i])
+               );
+          }
         }
 
         // Another way to exploit that there may be many identical boxes is to
@@ -160,10 +183,6 @@ class Box : public Space {
     }
 };
 
-bool cmp(const pair<int,int>& b1, const pair<int,int>& b2) {
-  return (b1.first * b1.second) > (b2.first * b2.second);
-}
-
 int main(int argc, char* argv[]) {
   try {
     if (argc != 1) return -1;
@@ -183,16 +202,17 @@ int main(int argc, char* argv[]) {
         boxes[k+i] = pair<int,int>(width,height);
       }
 
-      // maxLength upper bounds:
+      // Upper bounds of the length:
       //
-      // Compute a better maxLength by placing boxes with the same dimensions
-      //   one next to the other until filling the width of the paper.
+      //     Compute a better maxLength by placing boxes with the same dimensions
+      //       one next to the other until filling the width of the paper.
       //
-      // This gives better upper bounds than placing the boxes
-      //   on above the other.
-      int boxesPerRow = w / min(width,height);
-      int minRows = std::ceil(m / ((double)boxesPerRow));
-      l += minRows * max(width,height);
+      //     This gives better upper bounds than placing the boxes
+      //       on above the other.
+      //
+      l += min( upper_bound_length(w, m, width, height)
+              , upper_bound_length(w, m, height, width)
+              );
 
       // Increase the number of boxes
       k += m;

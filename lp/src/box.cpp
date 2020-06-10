@@ -8,11 +8,7 @@
 
 ILOSTLBEGIN
 
-bool cmp(const pair<int,int>& b1, const pair<int,int>& b2) {
-  return (b1.first * b1.second) > (b2.first * b2.second);
-}
-
-// Lower bound for Length
+// Lower bound for the length
 int lower_bound_length(const vector<pair<int,int>> boxes) {
   int l = 0;
   for (int i = 0; i < boxes.size(); i++) {
@@ -21,10 +17,19 @@ int lower_bound_length(const vector<pair<int,int>> boxes) {
   return l;
 }
 
+// Upper bound for the length
 int upper_bound_length(int w, int m, int width, int height) {
   int boxes_row = w / min(width,height);
   int min_rows = std::ceil(m / ((double)boxes_row));
   return min_rows * std::max(width,height);
+}
+
+bool cmp(const pair<int,int>& b1, const pair<int,int>& b2) {
+  return (b1.first * b1.second) > (b2.first * b2.second);
+}
+
+bool are_equal(const pair<int,int>& b1, const pair<int,int>& b2) {
+  return b1.first == b2.first && b1.second == b2.second;
 }
 
 int main(int argc, char* argv[]) {
@@ -33,8 +38,8 @@ int main(int argc, char* argv[]) {
 
   try {
     if (argc != 1) return -1;
-    IloInt w, n;  // width and total number of boxes
-    IloInt l = 0; // max length
+    IloInt w, n;
+    IloInt l = 0;
     cin >> w >> n;
     cout << w << " " << n << endl;
     vector<pair<int,int>> boxes(n);
@@ -48,13 +53,14 @@ int main(int argc, char* argv[]) {
         boxes[k+i] = pair<int,int>(width,height);
       }
 
-      // Upper Bounds of Length 'l'
+      // Upper bounds of the length:
       //
-      // Compute a better maxLength by placing boxes with the same dimensions
-      //   one next to the other until filling the width of the paper.
+      //     Compute a better maxLength by placing boxes with the same dimensions
+      //       one next to the other until filling the width of the paper.
       //
-      // This gives better upper bounds than placing the boxes
-      //   on above the other.
+      //     This gives better upper bounds than placing the boxes
+      //       on above the other.
+      //
       l += min( upper_bound_length(w, m, width, height)
               , upper_bound_length(w, m, height, width)
               );
@@ -63,8 +69,7 @@ int main(int argc, char* argv[]) {
       k += m;
     }
 
-    // Try placing the biggest boxes first
-    // nb. not sure if this works in CPLEX.
+    // Sort boxes in decreasing order.
     sort(boxes.begin(), boxes.end(), cmp);
 
     IloModel model(env);
@@ -80,7 +85,6 @@ int main(int argc, char* argv[]) {
     IloNumVarArray width  = IloNumVarArray(env, boxes.size(), 0, w);
     IloNumVarArray height = IloNumVarArray(env, boxes.size(), 0, l-1);
 
-    //IloNumVar length(env, 0, l-1);
     IloNumVar length(env, lower_bound_length(boxes)-1, l-1);
 
     IloInt i;
@@ -90,13 +94,13 @@ int main(int argc, char* argv[]) {
       IloInt b_width  = boxes[i].first;
       IloInt b_height = boxes[i].second;
 
-      // length
+      // Length
       model.add(length >= y_tl[i] + height[i] - 1);
 
-      // x bounds
+      // Bounds
       model.add(x_tl[i] <= w - width[i]);
 
-      // width & height
+      // Rotations
       if (b_width == b_height) {
         width[i].setBounds(b_width, b_width);
         height[i].setBounds(b_height, b_height);
@@ -107,20 +111,22 @@ int main(int argc, char* argv[]) {
         model.add(width[i] != height[i]);
       }
 
-      // overlapping
+      // Overlapping
       for (j = i+1; j < boxes.size(); j++) {
-        model.add(  (x_tl[i]+width[i]  <= x_tl[j])
-                 || (x_tl[i]           >= x_tl[j]+width[j])
-                 || (y_tl[i]+height[i] <= y_tl[j])
-                 || (y_tl[i]           >= y_tl[j]+height[j]));
-      }
+        // As we
+        if (are_equal(boxes[i], boxes[j])) {
+          // Breaking symmetries of identical boxes by imposng ordering.
+          model.add(y_tl[i] <= y_tl[j]); // strict inequality here would be incorrect.
 
-      // Breaking symmetries of identical boxes by imposng ordering.
-      if (i > 0) {
-        if (boxes[i-1].first == boxes[i].first
-            && boxes[i-1].second == boxes[i].second) {
-          model.add(y_tl[i-1] <= y_tl[i]);
-          // ^^^ Notice that a strict inequality here would be incorrect.
+          // overlapping can be optimized taking into account previous constraint
+          model.add(  (x_tl[i]+width[i]  <= x_tl[j])
+                   || (y_tl[i]+height[i] <= y_tl[j]));
+        }
+        else {
+          model.add(  (x_tl[i]+width[i]  <= x_tl[j])
+                   || (x_tl[i]           >= x_tl[j]+width[j])
+                   || (y_tl[i]+height[i] <= y_tl[j])
+                   || (y_tl[i]           >= y_tl[j]+height[j]));
         }
       }
     }

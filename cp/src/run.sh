@@ -5,7 +5,7 @@ OUT=../out
 
 for input in $IN/*.inp; do
     output=$(basename $input .inp).out
-    if timeout 3 ./p < $input > $OUT/$output; then
+    if timeout 60 ./p < $input > $OUT/$output; then
       echo "ok!"
       ./checker < $OUT/$output
     else
