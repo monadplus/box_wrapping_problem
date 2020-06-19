@@ -7,5 +7,5 @@ checker: checker.cc
 	$(CXX) -o $@ $<
 
 clean:
-	rm -f checker *.o
+	rm -f *.o
 .PHONY: clean

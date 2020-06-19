@@ -1,2 +1,4 @@
-resolver: nightly-2019-12-27
-extra-deps: []
+resolver: lts-14.9
+
+extra-deps:
+- mios-1.6.2@sha256:18cfd492792cf4f0fbd8664aee8717fe75771355921d47d69f23b67eed1280a4,5077

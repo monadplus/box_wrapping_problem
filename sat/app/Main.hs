@@ -8,11 +8,12 @@ import           Data.Coerce
 import           Data.Foldable     (traverse_)
 import           Data.Functor
 import           Data.List         (intercalate)
+import           Data.Maybe        (isNothing)
+import           Debug.Trace
 import           SAT               hiding (runSolver)
 import           System.IO
 import           System.Timeout    (timeout)
 import           Text.Printf
-import           Debug.Trace
 
 main :: IO ()
 main = do
@@ -29,7 +30,10 @@ findSolution :: S -> IO (Maybe BWPSolution)
 findSolution = loop Nothing
   where
     loop acc s = do
-      res <- timeout 4000000 $ runSolver s
+      -- Some UNSAT instances do not return [] but valid cyclic results.
+      -- We timeout to prevent infinite loops and return the previous best solution.
+      res <- if isNothing acc then Just <$> runSolver s
+             else timeout 5000000 $ runSolver s
       case res of
         Just (SAT (s', sol)) ->
           case translateSolution s' sol of

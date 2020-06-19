@@ -16,9 +16,9 @@ module SAT (
 -- Imports
 ----------------------------------------------
 
-import           Control.Arrow              ((&&&))
 import           Control.Lens               hiding (inside)
 import           Control.Monad.State.Strict
+import           Data.Bits
 import           Data.Coerce
 import           Data.Foldable              (traverse_)
 import           Data.List                  (nub, sortOn)
@@ -34,21 +34,6 @@ import           Text.Read                  (readMaybe)
 ----------------------------------------------
 -- Data Types
 ----------------------------------------------
-
--- type ClausesState = StateT ClausesBuilder
---
--- type WithEncoder m = (MonadIO m, MonadState ClausesBuilder m)
---
--- newtype ClausesEncoderApp m a =
---   ClausesEncoderApp
---     { runEncoder :: ClausesState m a
---     }
---   deriving newtype ( Functor
---                    , Applicative
---                    , Monad
---                    , MonadState ClausesBuilder
---                    , MonadIO
---                    )
 
 type BoxIndex = Int
 type RotIndex = Int
@@ -122,9 +107,16 @@ data S = S
     , _w         :: Int        -- ^ w
     , _maxLength :: Int        -- ^ maxLength
     , _clauses   :: CNF
+    , _extraVars :: Int
     }
   deriving stock (Show)
 makeLenses ''S
+
+-- | Use this for new variables in the AMO encodings
+getNewVars :: Int -> StateS [Variable]
+getNewVars n = do
+  start <- extraVars <<+= n
+  return $ coerce [start..start+n-1]
 
 -- | Lens for the computed value #boxes.
 getNBoxes :: S -> Int
@@ -181,18 +173,20 @@ instance Disjunctive (Maybe Variable) (Maybe Variable) where
   Nothing \/ Nothing     = emptyClause
 
 newS :: [Box] -> Int -> Int -> S
-newS boxes width maxLen = S
-    { _boxes     = boxes
-    , _w         = width
-    , _maxLength = maxLen
-    , _clauses   = []
-    }
+newS boxes width maxLen =
+  let nboxes = length boxes
+   in S{ _boxes     = boxes
+       , _w         = width
+       , _maxLength = maxLen
+       , _clauses   = []
+       , _extraVars = (nboxes*width*maxLen)*2 + nboxes + 1
+       }
 
-getBox :: Coord -> BoxIndex -> StateS Variable
-getBox coord b = (\s -> getBoxS s coord b) <$> get
+getTL :: Coord -> BoxIndex -> StateS Variable
+getTL coord b = (\s -> getTLS s coord b) <$> get
 
-getBoxS :: S -> Coord -> BoxIndex -> Variable
-getBoxS S{..} (x, y) b =
+getTLS :: S -> Coord -> BoxIndex -> Variable
+getTLS S{..} (x, y) b =
   Variable (x + y*_w + b*_w*_maxLength + 1)
 
 getRot :: RotIndex -> StateS Variable
@@ -211,7 +205,7 @@ getCellS s@S{..} coord c =
   where
     nboxes = getNBoxes s
     cellIndexStart      = (nboxes*_w*_maxLength) + nboxes + 1 -- TODO I added +1
-    Variable cellOffset = getBoxS s coord c
+    Variable cellOffset = getTLS s coord c
 
 ----------------------------------------------
 -- Encoding
@@ -222,25 +216,46 @@ getCellS s@S{..} coord c =
 conjunctionOf :: [Variable] -> Clause
 conjunctionOf = foldr (\/) emptyClause
 
--- | At least one,
-alo :: [Variable] -> Clause
-alo = conjunctionOf
+exactlyOne :: [Variable] -> SAT
+exactlyOne xs = do
+  atLeastOne xs
+  atMostOne xs
+
+-- | At Least One Constraint
+atLeastOne :: [Variable] -> SAT
+atLeastOne = addClause . conjunctionOf
+
+-- TODO: configurable
+atMostOne :: [Variable] -> SAT
+atMostOne = atMostOneLogarithmic
 
 -- At most one constraint: quadractic encoding
-amoQ :: [Variable] -> [Clause]
-amoQ variables =
+atMostOneQuadratic :: [Variable] -> SAT
+atMostOneQuadratic variables = addClauses
   [ neg (variables !! i) \/ neg (variables !! j)
   | i <- [0  ..(length variables - 1)]
   , j <- [i+1..(length variables - 1)]
   ]
 
--- At most one constraint: logarithmic encoding
-amoL :: [Variable] -> [Clause]
-amoL variables = undefined
+-- At Most One Constraint (Logarithmic Encoding)
+atMostOneLogarithmic :: [Variable] -> SAT
+atMostOneLogarithmic xs = do
+  ys <- getNewVars m
+  traverse_ (addClause . getClause) [ (x,y) | x <- zip [0..] xs, y <- zip [0..] ys]
+
+    where
+      n = length xs
+      m = ceiling $ logBase @Double 2 $ fromIntegral n
+
+      getClause :: ((Int, Variable), (Int, Variable)) -> Clause
+      getClause ((i, x),(j, y))
+        | testBit j i = neg x \/ y
+        | otherwise   = neg x \/ neg y
+
 
 -- At most one constraint: heule encoding
-amoH :: [Variable] -> [Clause]
-amoH variables = undefined
+atMostOneHeule :: [Variable] -> StateS [Clause]
+atMostOneHeule variables = error "Not implemented"
 
 ----------------------------------------------
 -- Constraints
@@ -249,26 +264,26 @@ amoH variables = undefined
 -- | By symmetry, place the biggest box on the coordinate (0,0).
 biggestBoxTopLeft :: SAT
 biggestBoxTopLeft = do
-  addClause =<< singleClause <$> getBox (0,0) 0 -- boxes are sorted in decreasing ord.
+  addClause =<< singleClause <$> getTL (0,0) 0 -- boxes are sorted in decreasing ord.
   allCoords <- paperRollCoords
   let p (x,y) = x > 0 || y > 0
       allCoordsExceptTL = filter p allCoords
-  tls <- traverse (`getBox` 0) allCoordsExceptTL
+  tls <- traverse (`getTL` 0) allCoordsExceptTL
   traverse_ (addClause . singleClause . neg) tls
 
 
 -- | Boxes must be placed exactly once in the paper roll.
-exactlyOne :: SAT
-exactlyOne =
-  forAllTL ((alo &&& amoQ) . snd) >>=
-    traverse_ (\(c,cs) -> addClauses (c:cs))
+exactlyOneClauses :: SAT
+exactlyOneClauses =
+  applyForAllBoxes_ $ \(b, _, coords) ->
+    exactlyOne =<< traverse (`getTL` b) coords
 
 -- | Boxes must be placed inside the paper roll.
 insideTheBounds :: SAT
 insideTheBounds =
   void $ applyForAllBoxes $ \(b, box, allCoords) ->
     forM_ allCoords $ \coord -> do
-      tl  <- getBox coord b
+      tl  <- getTL coord b
       rot <- getRot b
       addBoundingClause coord box rot tl
   where
@@ -304,7 +319,7 @@ overlappingVariables = do
       forM_ (area box (x,y)) $ \(i,j) ->
         do
         --whenM (inside (i,j) box) $ do
-          tl  <- getBox (x,y) b
+          tl  <- getTL (x,y) b
           cl  <- getCell (i,j) b
           addClause $ neg tl \/ cl
 
@@ -313,7 +328,7 @@ overlappingVariables = do
       forM_ (area box (x,y)) $ \(i,j) ->
         do
         --whenM (inside (i,j) box) $ do
-          tl  <- getBox (x,y) b
+          tl  <- getTL (x,y) b
           cl  <- getCell (i,j) b
           rot <- getRot b
           addClause $ neg tl \/ cl \/ rot
@@ -323,7 +338,7 @@ overlappingVariables = do
       forM_ (areaRotated box (x,y)) $ \(i,j) ->
         do
         --whenM (insideRotated (i,j) box) $ do
-          tl  <- getBox (x,y) b
+          tl  <- getTL (x,y) b
           cl  <- getCell (i,j) b
           rot <- getRot b
           addClause $ neg tl \/ cl \/ neg rot
@@ -334,7 +349,7 @@ amoOverlapping = do
   nboxes <- uses boxes length
   forM_ coords $ \(x,y) -> do
     bxsVars <- traverse (getCell (x,y)) [0..nboxes-1]
-    addClauses $ amoQ bxsVars
+    atMostOne bxsVars
 
 -- | Boxes can't overlap.
 noOverlapping :: SAT
@@ -344,7 +359,7 @@ noOverlapping =
 buildSAT :: SAT
 buildSAT = do
   biggestBoxTopLeft
-  exactlyOne
+  exactlyOneClauses
   insideTheBounds
   noOverlapping
 
@@ -569,17 +584,10 @@ applyForAllBoxes f =  do
   bxsAndCoords <- forAllBoxes
   traverse f bxsAndCoords
 
--- | For all tl variables, apply f grouping by box.
-forAllTL :: ((BoxIndex, [Variable]) -> r) -> StateS [r]
-forAllTL f =
-  applyForAllBoxes $ \(b, _, coords) -> do
-    tls <- traverse (`getBox` b) coords
-    return $ f (b, tls)
-
--- | For all tl variables, apply f.
-forAllTL' :: (Variable -> r) -> StateS [r]
-forAllTL' f =
-  concat <$> forAllTL (\(b, tls) -> fmap f tls)
+applyForAllBoxes_ :: ((BoxIndex, Box, [Coord]) -> StateS ()) -> SAT
+applyForAllBoxes_ f =  do
+  bxsAndCoords <- forAllBoxes
+  traverse_ f bxsAndCoords
 
 area :: Box -> Coord -> [Coord]
 area Box{..} (x,y) =

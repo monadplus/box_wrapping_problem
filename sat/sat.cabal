@@ -14,7 +14,6 @@ synopsis:
 description:
 category:
 extra-source-files:  README.md
-                     CHANGELOG.md
 tested-with:         GHC == 8.8.3
 
 source-repository head
@@ -45,7 +44,7 @@ Library
                       deepseq        >=1.4.4.0  && <1.5,
                       mios           >=1.6.2    && <1.7,
                       mtl            >=2.2.2    && <2.3,
-                      lens           >=4.18.1   && <4.19,
+                      lens           >=4.17.1   && <4.19,
                       text           >=1.2.3.0  && <2.0.0.0
 
   ghc-options:        -Wall

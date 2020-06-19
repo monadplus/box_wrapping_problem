@@ -110,7 +110,139 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%
 
-todo
+\section{Variables and Constraints}%
+\label{sec:Variables and Clauses}
+
+The following constants are used in the box wrapping problem:
+
+\begin{itemize}
+  \item $1 \leq W \leq 11$: width of the roll.
+  \item $1 \leq L \leq (\sum_{b \in B} h_b)$: maximum length of the roll.
+  \item $1 \leq B \leq 13$: total number of boxes.
+  \item $w_{b \in B}$: width of the $b$-th box.
+  \item $h_{b \in B}$: height of the $b$-th box.
+\end{itemize}
+
+The following variables are used in the problem:
+
+\begin{itemize}
+  \item $tl_{bij}$ where $i \in W, j \in L, b \in B$: box represented by its top-left coordinate.
+  \item $a_{bij}$ where $i \in W, j \in L, b \in B$: area of each box. Overlapping of areas is not allowed.
+  \item $r_b$ where $b \in B$: rotation of each box. \textit{True} means the box is rotated.
+\end{itemize}
+
+The following constraints are used in the problem:
+
+\begin{itemize}
+  \item \textbf{Exactly One}. Each box must appear once and only once in the paper roll.
+
+  \begin{equation}\label{eq:1}
+    \bigwedge\limits_{b=1}^{B} ((\sum_{i=1}^{W} \sum_{j=1}^{L} tl_{bij}) = 1)
+  \end{equation}
+
+  \item \textbf{Bounds}. Each box must be inside the bounds of the roll.
+
+  \begin{equation}\label{eq:2}
+    \begin{aligned}
+      &\forall i_{\in W} \forall j_{\in L} \bigwedge\limits_{b=1}^{B} \neg tl_{bij} & \quad w_b = h_b, i+w_b > W, j + h_b > L\\
+      &\forall i_{\in W} \forall j_{\in L} \bigwedge\limits_{b=1}^{B} (\neg tl_{bij} \land r_b) \land (\neg tl_{bij} \lor \neg r_b) & \quad w_b \neq h_b, i+w_b > W, j + h_b > L
+    \end{aligned}
+  \end{equation}
+
+  \item \textbf{Overlapping}. This constrant is divided in two constraints:
+
+    \begin{itemize}
+      \item Clauses to represent the \textbf{area} of each box.
+
+        \begin{equation}\label{eq:3}
+          \begin{aligned}
+            &\forall i_{\in W} \forall j_{\in L} \bigwedge\limits_{b=1}^{B} (\neg tl_{bij} \lor a_{bij}) \land \neg r_b & \quad w_b = h_b \\
+            &\forall i_{\in W} \forall j_{\in L} \bigwedge\limits_{b=1}^{B} (\neg tl_{bij} \lor a_{bij} \lor r_b) \land (\neg tl_{bij} \lor a_{bij} \lor \neg r_b) & \quad w_b \neq h_b
+          \end{aligned}
+        \end{equation}
+
+      \item \textbf{At most one constraint} of these areas to prevent the \mbox{overlapping}.
+
+        \begin{equation}\label{eq:4}
+          \forall b_{\in B} \sum_{i=1}^{W} \sum_{j=1}^{L} a_{bij} \leq 1
+        \end{equation}
+
+        Notice, this constraint is encoded using the \mbox{\textit{at most one logarithmic encoding}}.
+
+    \end{itemize}
+
+  \item (Optimization) By symmetry, placing the box on the left-half side is the same as placing the box in the right-half side. This constraint forces the biggest box to be on the left-half side, in the $(0,0)$ coordinate.
+
+    \begin{equation}\label{eq:5}
+      \begin{aligned}
+        &tl_{b00} \land (\bigwedge\limits_{i=1,j=1}^{W,L} \neg tl_{bij}) \quad b \in B \\
+      \end{aligned}
+    \end{equation}
+\end{itemize}
+
+\newpage
+
+\section{Implementation}%
+\label{sec:Implementation}
+
+This implementation is based on mios, a minisat-based CDCL SAT solver written in purely Haskell \cite{mios}. It is one of the few, open-source, SAT solvers written in Haskell with high performance.
+
+The implementation is split in two files:
+
+\begin{itemize}
+  \item \code{app/Main.hs}: main loop, at each iteration the objective function is minimized.
+  \item \code{src/SAT.hs}: implementation of the constraints, clauses and custom encoding.
+\end{itemize}
+
+Let's have a look at the encoding of the constraints:
+
+\begin{itemize}
+
+  \item Constraint \ref{eq:1}
+    \begin{listing}[H]
+      \inputminted[firstline=275, lastline=279, breaklines]{haskell}{../src/SAT.hs}
+      \inputminted[firstline=218, lastline=222, breaklines]{haskell}{../src/SAT.hs}
+      \inputminted[firstline=223, lastline=226, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+    \begin{listing}[H]
+      \inputminted[firstline=239, lastline=253, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+  \item Constraint \ref{eq:2}
+    \begin{listing}[H]
+      \inputminted[firstline=281, lastline=295, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+  \newpage
+
+  \item Constraint \ref{eq:3}
+    \begin{listing}[H]
+      \inputminted[firstline=297, lastline=315, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+  \item Constraint \ref{eq:4}
+    \begin{listing}[H]
+      \inputminted[firstline=346, lastline=352, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+  \newpage
+
+  \item Constraint \ref{eq:5}
+    \begin{listing}[H]
+      \inputminted[firstline=265, lastline=272, breaklines]{haskell}{../src/SAT.hs}
+    \end{listing}
+
+\end{itemize}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{thebibliography}{1}
+  \bibitem{mios} Narazaki Shuji. A Minisat-based CDCL SAT solver in Haskell. url{https://hackage.haskell.org/package/mios-1.6.2}
+\end{thebibliography}
+
 
 %%%%%%%%%%%%%%%%%%%%%%%
 
